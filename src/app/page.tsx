@@ -1,10 +1,13 @@
 import { Suspense } from "react";
-import { FrontPage, FrontPageSkeleton } from "@/components/FrontPage";
+import { FeedPage } from "@/components/FeedPage";
+import { ListSkeleton } from "@/components/StoryList";
 
 export default function Home() {
   return (
-    <Suspense fallback={<FrontPageSkeleton />}>
-      <FrontPage feed="top" />
-    </Suspense>
+    <div className="list-page">
+      <Suspense fallback={<ListSkeleton />}>
+        <FeedPage feed="top" />
+      </Suspense>
+    </div>
   );
 }

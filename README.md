@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hacker Times
 
-## Getting Started
+A calmer, more readable way to read Hacker News. Built with Next.js (App Router, Cache Components).
 
-First, run the development server:
+## What it does
+
+- **Story lists** (`/`, `/new`, `/best`, `/ask`, `/show`, `/jobs`): scannable rows with favicon, title, domain, points and a prominent comment count. Clicking a title opens the thread; the domain link (↗) goes straight to the article.
+- **Top of the Week** (`/week`, `/week/YYYY-MM-DD`): the most upvoted stories posted in a given Monday–Sunday week (UTC), with previous/next navigation back to HN's first week. Any date redirects to its week's Monday.
+- **Thread page** (`/item/:id`): the linked article as a preview card at the top, then the full comment tree, built for reading:
+  - ~70-character line length, 17px serif body text, AA-contrast metadata
+  - clickable thread rails: click the line beside a comment to collapse it and its replies ("show +N replies")
+  - OP badge on the story author's comments; `> quoted` lines styled as quotes
+  - comments posted since your last visit are marked **new** (stored in `localStorage`)
+  - keyboard: `j`/`k` next/previous comment, `n`/`p` next/previous top-level thread, `x` collapse
+  - Collapse all / Expand all, and a sticky outline of top-level threads in the sidebar on wide screens
+- Light and dark themes follow the OS setting.
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How data flows
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Data | Source | Cache (`cacheLife`) |
+| --- | --- | --- |
+| Feed IDs & items | [HN Firebase API](https://github.com/HackerNews/API) | `minutes` |
+| Comment trees | [Algolia HN API](https://hn.algolia.com/api) `/items/:id` (one request per story); falls back to walking Firebase (capped at 200 comments) when Algolia hasn't indexed the item yet | `minutes` |
+| Top of the Week | Algolia `/search` filtered by `created_at_i` to the week, ranked by points | `minutes` for the current week, `days` for past weeks |
+| Link previews (og:image/title/description) | Fetched server-side from the story URL (4s timeout, reads only `<head>`, max 512KB) | `days` |
+| Favicons | `icons.duckduckgo.com`, loaded by the browser | n/a |
 
-## Learn More
+See `src/lib/hn.ts` and `src/lib/preview.ts`.
 
-To learn more about Next.js, take a look at the following resources:
+Comment and self-post HTML from HN is sanitized with an allow-list (`src/lib/sanitize.ts`), and links to `news.ycombinator.com/item?id=…` are rewritten to stay in the app.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The comment tree is server-rendered HTML. The only client JS on the thread page is `ThreadControls`, which adds collapse, keyboard navigation and "new" highlighting through event delegation.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The link previewer only fetches public `http(s)` hosts (literal private/loopback IPs and `localhost` are rejected, and every redirect is re-checked). It does not resolve DNS, so a public hostname that points at a private IP isn't caught. Keep that in mind if you deploy somewhere with sensitive internal services.
 
-## Deploy on Vercel
+## Environment variables (all optional)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `HN_API_BASE` | `https://hacker-news.firebaseio.com/v0` | Firebase API base |
+| `HN_ALGOLIA_BASE` | `https://hn.algolia.com/api/v1` | Algolia API base |
+| `LINK_PREVIEW_ALLOW_PRIVATE_HOSTS` | unset | Set to `1` in **dev only** to let the previewer hit `localhost` (e.g. a mock server). Ignored in production. |

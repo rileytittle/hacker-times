@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { CommentThread } from "@/components/CommentThread";
-import { LinkPreviewCard } from "@/components/LinkPreviewCard";
-import { kickerFor } from "@/components/StoryCard";
+import { Comments, ThreadOutline } from "@/components/Comments";
+import { LinkCard } from "@/components/LinkCard";
+import { ThreadControls } from "@/components/ThreadControls";
 import { countComments, getItem, getStoryWithComments } from "@/lib/hn";
 import { getLinkPreview } from "@/lib/preview";
-import { articleDate, plural } from "@/lib/format";
+import { domainOf, fullTimestamp, plural, timeAgo } from "@/lib/format";
 import { sanitizeHN } from "@/lib/sanitize";
 
 function parseId(raw: string): number | null {
@@ -20,82 +19,81 @@ export async function generateMetadata({ params }: PageProps<"/item/[id]">): Pro
   return { title: item?.title ?? "Story" };
 }
 
-async function Article({ params }: Pick<PageProps<"/item/[id]">, "params">) {
+async function Story({ params }: Pick<PageProps<"/item/[id]">, "params">) {
   const id = parseId((await params).id);
   if (!id) notFound();
 
   const data = await getStoryWithComments(id);
   if (!data || !data.item.title) notFound();
 
-  const { item, comments } = data;
+  const { item, comments, asOf } = data;
   const preview = item.url ? await getLinkPreview(item.url) : null;
   const total = countComments(comments);
+  const domain = domainOf(item.url);
 
   return (
-    <article className="article">
-      <header className="article__header">
-        <p className="kicker">{kickerFor(item)}</p>
-        <h1 className="article__headline">{item.title}</h1>
-        {preview?.description && <p className="article__dek">{preview.description}</p>}
-        <p className="byline">
-          {item.by && (
-            <span>
-              By{" "}
-              <a href={`https://news.ycombinator.com/user?id=${item.by}`} target="_blank" rel="noopener noreferrer">
-                {item.by}
-              </a>
-            </span>
-          )}
-          <time dateTime={new Date(item.time * 1000).toISOString()}>{articleDate(item.time)}</time>
-          {item.type !== "job" && <span>{plural(item.score ?? 0, "point")}</span>}
-        </p>
-      </header>
+    <div className="item-layout">
+      <article className="item">
+        <header className="item__header">
+          <h1 className="item__title">{item.title}</h1>
+          <p className="item__meta">
+            {item.type !== "job" && <span className="item__points">{plural(item.score ?? 0, "point")}</span>}
+            {item.by && (
+              <span>
+                by{" "}
+                <a href={`https://news.ycombinator.com/user?id=${item.by}`} target="_blank" rel="noopener noreferrer">
+                  {item.by}
+                </a>
+              </span>
+            )}
+            <time dateTime={new Date(item.time * 1000).toISOString()} title={fullTimestamp(item.time)}>
+              {timeAgo(item.time, asOf)}
+            </time>
+            {domain && <span>{domain}</span>}
+          </p>
+        </header>
 
-      {item.url && <LinkPreviewCard url={item.url} preview={preview} />}
+        {item.url && <LinkCard url={item.url} preview={preview} />}
 
-      {item.text && (
-        <div className="article__body prose" dangerouslySetInnerHTML={{ __html: sanitizeHN(item.text) }} />
-      )}
+        {item.text && <div className="item__text prose" dangerouslySetInnerHTML={{ __html: sanitizeHN(item.text) }} />}
 
-      {item.type !== "job" && (
-        <section className="article__comments" id="comments">
-          <div className="comments-header">
-            <h2 className="rule-heading">{plural(total, "Comment")}</h2>
-            <a
-              href={`https://news.ycombinator.com/item?id=${item.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="comments-header__hn"
-            >
-              Join the discussion on Hacker News →
-            </a>
-          </div>
-          <CommentThread comments={comments} />
-        </section>
-      )}
+        {item.type !== "job" && (
+          <section className="item__comments" id="comments" aria-label="Comments">
+            <ThreadControls storyId={item.id} total={total} />
+            <Comments comments={comments} op={item.by} asOf={asOf} />
+          </section>
+        )}
+      </article>
 
-      <p className="article__back">
-        <Link href="/">← Back to the Front Page</Link>
-      </p>
-    </article>
+      <aside className="item-layout__aside">
+        <ThreadOutline comments={comments} op={item.by} />
+      </aside>
+    </div>
   );
 }
 
-function ArticleSkeleton() {
+function StorySkeleton() {
   return (
-    <div className="skeleton skeleton--article" aria-busy="true" aria-label="Loading story">
-      <div className="skeleton__line skeleton__line--kicker" />
-      <div className="skeleton__line skeleton__line--headline" />
-      <div className="skeleton__line skeleton__line--headline short" />
-      <div className="skeleton__block skeleton__block--lead" />
+    <div className="item-layout" aria-busy="true" aria-label="Loading story">
+      <div className="item">
+        <div className="skeleton-bar skeleton-bar--headline" />
+        <div className="skeleton-bar skeleton-bar--meta" />
+        <div className="skeleton-card" />
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="skeleton-row">
+            <div className="skeleton-bar skeleton-bar--meta" />
+            <div className="skeleton-bar skeleton-bar--title" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function ItemPage({ params }: PageProps<"/item/[id]">) {
   return (
-    <Suspense fallback={<ArticleSkeleton />}>
-      <Article params={params} />
+    <Suspense fallback={<StorySkeleton />}>
+      <Story params={params} />
     </Suspense>
   );
 }

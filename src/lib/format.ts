@@ -52,22 +52,58 @@ export function truncate(s: string, max: number): string {
   return s.slice(0, s.lastIndexOf(" ", max) > 0 ? s.lastIndexOf(" ", max) : max) + "…";
 }
 
-/** NYT-style dateline, e.g. "Nov. 2, 2026, 10:14 a.m. ET". */
-export function articleDate(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000);
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
+// ---------------------------------------------------------------------------
+// Weeks (Monday-start, UTC)
+// ---------------------------------------------------------------------------
+
+const DAY = 86_400;
+/** Monday of the week Hacker News launched. */
+export const FIRST_WEEK = "2007-02-19";
+
+export function isoDate(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
+}
+
+/** Unix seconds for 00:00 UTC on the Monday of the week containing `unixSeconds`. */
+export function mondayOf(unixSeconds: number): number {
+  const dayStart = Math.floor(unixSeconds / DAY) * DAY;
+  const weekday = (new Date(dayStart * 1000).getUTCDay() + 6) % 7; // Mon=0
+  return dayStart - weekday * DAY;
+}
+
+/** Parse "YYYY-MM-DD" to unix seconds (UTC midnight), or null if invalid. */
+export function parseIsoDate(s: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const ms = Date.parse(`${s}T00:00:00Z`);
+  if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== s) return null;
+  return ms / 1000;
+}
+
+export function addWeeks(monday: number, n: number): number {
+  return monday + n * 7 * DAY;
+}
+
+/** e.g. "Nov 2 – 8, 2026" or "Dec 29, 2025 – Jan 4, 2026". */
+export function weekRangeLabel(monday: number): string {
+  const start = new Date(monday * 1000);
+  const end = new Date((monday + 6 * DAY) * 1000);
+  const md = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const y = (d: Date) => d.getUTCFullYear();
+  if (y(start) !== y(end)) return `${md(start)}, ${y(start)} – ${md(end)}, ${y(end)}`;
+  if (start.getUTCMonth() === end.getUTCMonth()) return `${md(start)} – ${end.getUTCDate()}, ${y(end)}`;
+  return `${md(start)} – ${md(end)}, ${y(end)}`;
+}
+
+/** Absolute timestamp for tooltips, e.g. "Nov 2, 2026, 10:14 AM ET". */
+export function fullTimestamp(unixSeconds: number): string {
+  return (
+    new Date(unixSeconds * 1000).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
       timeZone: "America/New_York",
-    })
-      .formatToParts(d)
-      .map((p) => [p.type, p.value]),
+    }) + " ET"
   );
-  const month = parts.month === "May" ? "May" : `${parts.month}.`;
-  const ampm = parts.dayPeriod === "AM" ? "a.m." : "p.m.";
-  return `${month} ${parts.day}, ${parts.year}, ${parts.hour}:${parts.minute} ${ampm} ET`;
 }
