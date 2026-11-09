@@ -1,30 +1,25 @@
 export type Feed = "top" | "new" | "best" | "ask" | "show" | "job";
 
-export interface Section {
+export interface FeedTab {
   feed: Feed;
-  /** URL slug under /section/ (empty for the front page). */
+  /** URL slug (empty for the home page). */
   slug: string;
   label: string;
   href: string;
 }
 
-export const FRONT_PAGE: Section = {
-  feed: "top",
-  slug: "",
-  label: "Front Page",
-  href: "/",
-};
-
-export const SECTIONS: Section[] = [
-  { feed: "new", slug: "latest", label: "Latest", href: "/section/latest" },
-  { feed: "best", slug: "best", label: "Best", href: "/section/best" },
-  { feed: "ask", slug: "ask", label: "Ask HN", href: "/section/ask" },
-  { feed: "show", slug: "show", label: "Show HN", href: "/section/show" },
-  { feed: "job", slug: "jobs", label: "Jobs", href: "/section/jobs" },
+export const FEEDS: FeedTab[] = [
+  { feed: "top", slug: "", label: "Top", href: "/" },
+  { feed: "new", slug: "new", label: "New", href: "/new" },
+  { feed: "best", slug: "best", label: "Best", href: "/best" },
+  { feed: "ask", slug: "ask", label: "Ask", href: "/ask" },
+  { feed: "show", slug: "show", label: "Show", href: "/show" },
+  { feed: "job", slug: "jobs", label: "Jobs", href: "/jobs" },
 ];
 
-export const ALL_SECTIONS = [FRONT_PAGE, ...SECTIONS];
+/** Feeds that live under /[feed] (everything except the home page). */
+export const SLUGGED_FEEDS = FEEDS.filter((f) => f.slug);
 
-export function sectionBySlug(slug: string): Section | undefined {
-  return SECTIONS.find((s) => s.slug === slug);
+export function feedBySlug(slug: string): FeedTab | undefined {
+  return SLUGGED_FEEDS.find((f) => f.slug === slug);
 }

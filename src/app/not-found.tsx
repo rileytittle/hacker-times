@@ -2,11 +2,10 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="not-found">
-      <p className="kicker">Corrections</p>
-      <h1 className="article__headline">We couldn&rsquo;t find that story.</h1>
+    <div className="list-page not-found">
+      <h1 className="page-title">Nothing here</h1>
       <p>
-        It may have been deleted, or the link may be wrong. <Link href="/">Return to the Front Page</Link>.
+        That story or page doesn&rsquo;t exist, or it was deleted. <Link href="/">Back to Top stories</Link>
       </p>
     </div>
   );

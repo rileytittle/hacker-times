@@ -52,6 +52,13 @@ export interface Comment {
 export interface StoryWithComments {
   item: HNItem;
   comments: Comment[];
+  /** When this was fetched (ms). Used as "now" for relative times. */
+  asOf: number;
+}
+
+export interface StoryList {
+  stories: HNItem[];
+  asOf: number;
 }
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -72,12 +79,68 @@ export async function getItem(id: number): Promise<HNItem | null> {
   return getJSON<HNItem | null>(`${HN_API}/item/${id}.json`);
 }
 
-export async function getStories(feed: Feed, limit = 30): Promise<HNItem[]> {
+export async function getStories(feed: Feed, limit = 30): Promise<StoryList> {
   "use cache";
   cacheLife("minutes");
   const ids = (await getFeedIds(feed)).slice(0, limit);
   const items = await Promise.all(ids.map((id) => getItem(id).catch(() => null)));
-  return items.filter((i): i is HNItem => !!i && !i.deleted && !i.dead);
+  return {
+    stories: items.filter((i): i is HNItem => !!i && !i.deleted && !i.dead),
+    asOf: Date.now(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Top of the week
+// ---------------------------------------------------------------------------
+
+interface AlgoliaHit {
+  objectID: string;
+  title: string | null;
+  url: string | null;
+  author: string;
+  points: number | null;
+  num_comments: number | null;
+  created_at_i: number;
+  story_text: string | null;
+}
+
+/**
+ * Most-upvoted stories created in [weekStart, weekStart + 7 days), via
+ * Algolia's `search` endpoint, which ranks an empty query by popularity.
+ * We still sort by points locally so the order is exact.
+ */
+export async function getTopOfWeek(weekStart: number, limit = 30): Promise<StoryList> {
+  "use cache";
+  const weekEnd = weekStart + 7 * 86_400;
+  // A finished week's ranking barely changes; the current week moves fast.
+  if (weekEnd * 1000 < Date.now() - 86_400_000) cacheLife("days");
+  else cacheLife("minutes");
+
+  const params = new URLSearchParams({
+    tags: "story",
+    numericFilters: `created_at_i>=${weekStart},created_at_i<${weekEnd}`,
+    hitsPerPage: String(Math.min(limit * 2, 100)),
+  });
+  const { hits } = await getJSON<{ hits: AlgoliaHit[] }>(`${ALGOLIA_API}/search?${params}`);
+
+  const stories: HNItem[] = hits
+    .filter((h) => h.title)
+    .map((h): HNItem => ({
+      id: Number(h.objectID),
+      type: "story",
+      by: h.author,
+      time: h.created_at_i,
+      title: h.title ?? undefined,
+      url: h.url ?? undefined,
+      text: h.story_text ?? undefined,
+      score: h.points ?? 0,
+      descendants: h.num_comments ?? 0,
+    }))
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, limit);
+
+  return { stories, asOf: Date.now() };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +220,7 @@ export async function getStoryWithComments(id: number): Promise<StoryWithComment
     comments = await commentsFromFirebase(item.kids ?? []);
   }
 
-  return { item, comments: rankTopLevel(comments, item.kids) };
+  return { item, comments: rankTopLevel(comments, item.kids), asOf: Date.now() };
 }
 
 export function countComments(comments: Comment[]): number {
